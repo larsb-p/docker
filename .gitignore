@@ -1,0 +1,4 @@
+# Ignore specific subfolders in alma9
+alma9/nusquids_bsm
+alma9/nusquids_only
+alma9/nusquids_test
