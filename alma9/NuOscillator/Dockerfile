@@ -2,7 +2,8 @@ FROM lbathepeters/root_v6_30_04:alma9 AS nuoscillator_build
 
 WORKDIR /opt/
 
-RUN git clone https://github.com/dbarrow257/NuOscillator --branch feature_NuSQUIDS /opt/NuOscillator
+#RUN git clone https://github.com/dbarrow257/NuOscillator --branch feature_NuSQUIDS /opt/NuOscillator
+RUN git clone https://github.com/larsb-p/NuOscillator.git --branch feature_NuSQUIDS /opt/NuOscillator
 WORKDIR /opt/NuOscillator
 RUN mkdir build
 WORKDIR build
