@@ -1,0 +1,86 @@
+#!/bin/bash
+#
+# nugen-dev -- drop into a shell that has the nugen_env toolchain (ROOT 6.30.04
+# + LHAPDF 6.5.1 on Alma9) but where YOUR SOURCE AND BUILD TREES LIVE ON THE
+# MAC, not inside the image.
+#
+# The container is disposable; everything you care about is bind-mounted from
+# the host, so `rm` on the container costs you nothing and your editor, git and
+# Finder all see the files normally.
+#
+#   nugen-dev                    # mount $PWD at /work, interactive shell
+#   nugen-dev -d ~/generators    # mount a different directory
+#   nugen-dev -- make -j8        # run one command and exit
+#
+# IMPORTANT -- what you build here is a LINUX binary for the container's
+# architecture. It will not run natively on macOS. That is inherent to using a
+# Linux toolchain, not a limitation of this script: compile in the container,
+# run in the container, keep the files on the host.
+#
+# The nugen_env image itself is NEVER modified by this script.
+
+set -euo pipefail
+
+IMAGE="${NUGEN_DEV_IMAGE:-lbathepeters/nugen_env:alma9}"
+WORKDIR_HOST="${PWD}"
+CONTAINER_WORKDIR=/work
+
+usage() {
+  sed -n '2,25p' "$0" | sed 's/^# \?//'
+  exit "${1:-0}"
+}
+
+CMD=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -d|--dir)   WORKDIR_HOST="$2"; shift 2 ;;
+    -i|--image) IMAGE="$2";        shift 2 ;;
+    -h|--help)  usage 0 ;;
+    --)         shift; CMD=("$@"); break ;;
+    *)          echo "unknown argument: $1" >&2; usage 1 ;;
+  esac
+done
+
+if [ ! -d "${WORKDIR_HOST}" ]; then
+  echo "nugen-dev: no such directory: ${WORKDIR_HOST}" >&2
+  exit 1
+fi
+# Resolve to an absolute path -- docker -v rejects relative ones.
+WORKDIR_HOST="$(cd "${WORKDIR_HOST}" && pwd)"
+
+# Persist the shell history and any ccache between runs, so a disposable
+# container does not mean re-typing everything or recompiling from cold. These
+# live under the mounted tree so they are on the host too.
+mkdir -p "${WORKDIR_HOST}/.nugen-dev/ccache"
+
+DOCKER_ARGS=(
+  --rm
+  --interactive
+  --workdir "${CONTAINER_WORKDIR}"
+  --volume "${WORKDIR_HOST}:${CONTAINER_WORKDIR}"
+  --volume "${WORKDIR_HOST}/.nugen-dev/ccache:/root/.ccache"
+  --env "HISTFILE=${CONTAINER_WORKDIR}/.nugen-dev/bash_history"
+  --env "TERM=${TERM:-xterm-256color}"
+  # Generators are mostly single-threaded per event; leave OpenMP alone unless
+  # asked, matching what the generator images themselves set.
+  --env "OMP_NUM_THREADS=${OMP_NUM_THREADS:-1}"
+)
+
+# Only allocate a TTY when there actually is one, so `nugen-dev -- make` still
+# works from a script or CI.
+[ -t 0 ] && DOCKER_ARGS+=(--tty)
+
+# Forward the ssh agent when present, so `git clone` of a private generator repo
+# (NEUT, neut-data) works from inside the dev shell exactly as it does outside.
+if [ -n "${SSH_AUTH_SOCK:-}" ]; then
+  DOCKER_ARGS+=(--volume "${SSH_AUTH_SOCK}:/ssh-agent" --env "SSH_AUTH_SOCK=/ssh-agent")
+fi
+
+if [ ${#CMD[@]} -eq 0 ]; then
+  CMD=(/bin/bash)
+  echo "nugen-dev: ${IMAGE}"
+  echo "           ${WORKDIR_HOST}  ->  ${CONTAINER_WORKDIR}"
+  echo "           builds here are Linux binaries; run them in this shell."
+fi
+
+exec docker run "${DOCKER_ARGS[@]}" "${IMAGE}" "${CMD[@]}"

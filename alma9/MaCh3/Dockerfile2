@@ -1,0 +1,23 @@
+FROM lbathepeters/root_v6_30_04:alma9 AS mach3_build
+
+# Install SSH client
+#RUN dnf install -y openssh-clients
+
+# Configure SSH and known_hosts
+RUN mkdir -p -m 0700 ~/.ssh && \
+    ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+# Debug SSH connection (optional)
+#RUN --mount=type=ssh ssh -T git@github.com || true
+#RUN git clone git@github.com:/t2k-software/MaCh3 --branch dbarrow257/feature/NuSQUIDS /opt/MaCh3
+RUN --mount=type=ssh git clone git@github.com:t2k-software/MaCh3 --branch dbarrow257/feature/NuSQUIDS /opt/MaCh3
+# Debug SSH connection
+#RUN --mount=type=ssh ssh -T git@github.com || true
+#RUN --mount=type=ssh git clone git@github.com:t2k-software/MaCh3 
+# Debug SSH connection
+#RUN --mount=type=ssh ssh -T git@github.com || true
+
+
+# Clone the repository
+#RUN --mount=type=ssh git clone git@github.com:/t2k-software/MaCh3 --branch dbarrow257/feature/NuSQUIDS /opt/MaCh3
+

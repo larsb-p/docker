@@ -1,0 +1,38 @@
+#!/bin/bash
+#
+# Print which generators are in this image, where they live, and whether their
+# binaries actually resolve their shared libraries. Cheap sanity check after
+# pulling the image or adding a generator to it.
+
+check() {
+  local name="$1" root="$2" exe="$3"
+  printf "%-10s %-28s " "${name}" "${root}"
+  if [ ! -d "${root}" ]; then
+    printf "MISSING (no such directory)\n"
+    return
+  fi
+  local path
+  path=$(command -v "${exe}" 2>/dev/null)
+  if [ -z "${path}" ]; then
+    printf "NOT ON PATH (%s)\n" "${exe}"
+    return
+  fi
+  local missing
+  missing=$(ldd "${path}" 2>/dev/null | grep -c "not found")
+  if [ "${missing}" -gt 0 ]; then
+    printf "BROKEN (%s unresolved libs)\n" "${missing}"
+  else
+    printf "ok (%s)\n" "${exe}"
+  fi
+}
+
+echo "generator  install root                 status"
+echo "---------------------------------------------------------------"
+check NuWro    "${NUWRO}"         nuwro
+check GiBUU    "${GiBUU}"         GiBUU.x
+check NEUT     "${NEUT_ROOT}"     neutroot2
+check Achilles "${ACHILLES_ROOT}" achilles
+check GENIE    "${GENIE}"         gevgen
+echo
+echo "GENIE tune : ${GENIE_XSEC_TUNE} (splines ${GENIE_XSEC_VERSION})"
+echo "ROOT       : $(root-config --version 2>/dev/null || echo 'not found')"
