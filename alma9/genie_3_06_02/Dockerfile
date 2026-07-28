@@ -15,7 +15,13 @@
 # fetched instead. Available tunes for 3_06_00 are:
 #   AR23_20i_00_000  G18_02a_00_000  G18_10a_02_11a  G18_10a_02_11b  N24_20i_02_11b
 
+# NCORES is passed by make_genie.sh but the 3_04_02 Dockerfile never declared
+# it, so the build silently ran at -j 4 regardless. It matters most for the
+# emulated amd64 half, which is the slowest thing in this repo.
+ARG NCORES=4
+
 FROM lbathepeters/buildbox:alma9 AS lhapdf_build
+ARG NCORES
 
 WORKDIR /
 
@@ -38,9 +44,13 @@ WORKDIR /opt/LHAPDF-build
 RUN ln -s /usr/bin/python3 /usr/bin/python
 RUN /opt/LHAPDF-src/LHAPDF-${LHAPDF_VERS}/configure \
                                     --prefix=/opt/LHAPDF/${LHAPDF_VERS} \
-    && make install -j 4
+    && make install -j ${NCORES}
 
 FROM lbathepeters/root_v6_30_04:alma9 AS genie_build
+# Must be repeated: ARG scope is per-stage, and without it ${NCORES} below would
+# expand to empty, turning "make -j ${NCORES}" into an unlimited-parallelism
+# "make -j" that can exhaust memory.
+ARG NCORES
 WORKDIR /
 
 COPY --from=lhapdf_build /opt/LHAPDF/ /opt/LHAPDF/
@@ -81,7 +91,7 @@ ENV GENIE=/opt/Generator-src
 WORKDIR /opt/Generator-src
 RUN mkdir -p /opt/genie/${GENIE_VERSION} \
  && ./configure --prefix=/opt/genie/${GENIE_VERSION} --enable-debug --enable-lhapdf6 \
- && make -j 4 && make install
+ && make -j ${NCORES} && make install
 
 ENV GENIE_REWEIGHT=/opt/Reweight-src
 WORKDIR /opt/Reweight-src

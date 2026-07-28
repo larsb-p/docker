@@ -27,15 +27,34 @@ fi
 # emulated. Building the native half first means a broken build shows up in
 # minutes instead of after the slow one. Swap back if you build on x86 hardware.
 
+# RECLAIM BETWEEN ARCHITECTURES. The NEUT image is ~9.3GB (it ships the RMF
+# tensor tables) and the build additionally needs neut-data checked out, which
+# is ~12GB with its git history. Keeping the first architecture on disk while
+# the second builds is what makes this fail with "no space left on device",
+# which surfaces confusingly as "rpc error: EOF" or ResourceExhausted.
+#
+# Deleting the local image after pushing is safe: docker manifest create reads
+# the per-arch manifests back from the registry, not from local storage.
+report_free() {
+  echo "### free space: $(df -h / | awk 'NR==2{print $4}') -- $1"
+}
+
+report_free "before aarch64"
 docker buildx build . -t lbathepeters/neut_${NEUT_VERSION_US}:alma9-aarch64 \
                         --platform=linux/arm64 \
                         --load --ssh default --build-arg NEUT_VERSION=${NEUT_VERSION} --build-arg NCORES=8
 docker push lbathepeters/neut_${NEUT_VERSION_US}:alma9-aarch64
+docker rmi lbathepeters/neut_${NEUT_VERSION_US}:alma9-aarch64 || true
+docker builder prune -f || true
+report_free "after aarch64 push+cleanup"
 
 docker buildx build . -t lbathepeters/neut_${NEUT_VERSION_US}:alma9-x86_64 \
                        --platform=linux/amd64 \
                        --load --ssh default --build-arg NEUT_VERSION=${NEUT_VERSION} --build-arg NCORES=8
 docker push lbathepeters/neut_${NEUT_VERSION_US}:alma9-x86_64
+docker rmi lbathepeters/neut_${NEUT_VERSION_US}:alma9-x86_64 || true
+docker builder prune -f || true
+report_free "after x86_64 push+cleanup"
 
 docker manifest rm lbathepeters/neut_${NEUT_VERSION_US}:alma9 || true
 docker manifest create lbathepeters/neut_${NEUT_VERSION_US}:alma9 \
